@@ -3,14 +3,17 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import secrets
+import selectors
 import shlex
 import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 
 ROOT = '/media/developer/telesera'
 
@@ -108,11 +111,53 @@ ln -sfn {root}/releases/{revision} {root}/current
 cp 25-telesera /var/lib/webosbrew/init.d/25-telesera
 chmod 755 /var/lib/webosbrew/init.d/25-telesera
 /var/lib/webosbrew/init.d/25-telesera
-luna-send -n 3 -w 30000 luna://com.webos.appInstallService/dev/install '{{"id":"it.ennio.telesera","ipkUrl":"{dest}/app.ipk","subscribe":true}}'
-rm -f bundle.tar.gz config.json app.ipk
 '''.format(dest=shlex.quote(dest), root=ROOT, revision=commit)
-        result = remote(command)
-        print(result)
+        # A subscription needs an open input/PTY on webOS. Three replies only
+        # reach package verification, not installation completion.
+        remote(command)
+        request = json.dumps(dict(id='it.ennio.telesera', ipkUrl=dest + '/app.ipk', subscribe=True))
+        install = 'luna-send -i -w 30000 luna://com.webos.appInstallService/dev/install ' + shlex.quote(request)
+        process = subprocess.Popen(['ssh', '-tt', *options, args.host, install],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        installed = False
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        pending = b''
+        deadline = time.monotonic() + 50
+        try:
+            while time.monotonic() < deadline:
+                if not selector.select(timeout=min(1, max(0, deadline - time.monotonic()))):
+                    if process.poll() is not None:
+                        break
+                    continue
+                chunk = os.read(process.stdout.fileno(), 8192)
+                if not chunk:
+                    break
+                pending += chunk
+                while b'\n' in pending:
+                    line, pending = pending.split(b'\n', 1)
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if event.get('returnValue') is False or 'FAILED' in str(event.get('statusValue', '')).upper():
+                        raise RuntimeError('TV rejected the package: ' + str(event.get('errorText') or event.get('details')))
+                    if event.get('id') == 'it.ennio.telesera' and event.get('details', {}).get('state') == 'installed':
+                        installed = True
+                        break
+                if installed:
+                    break
+        finally:
+            selector.close()
+            process.terminate()
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+        if not installed:
+            raise RuntimeError('TV did not confirm installation; staging files and rollback are retained')
+        remote('rm -f ' + dest + '/bundle.tar.gz ' + dest + '/config.json ' + dest + '/app.ipk')
         print('Installed revision', commit, 'engine SHA256', digest)
         print('Check the installer result, then verify /api/status and the TV workflow before declaring success.')
 

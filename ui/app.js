@@ -139,7 +139,25 @@
     catch (error) { toast(error.message); } finally { node.disabled = false; }
   }
   function safeHTTPS(url) { try { var parsed = new URL(url); return parsed.protocol === 'https:' && !parsed.username && !parsed.password ? parsed : null; } catch (_) { return null; } }
-  function openLink(url) { var parsed = safeHTTPS(url); if (!parsed) { toast('Questo collegamento non è supportato.'); return; } if ((parsed.hostname === 't.me' || parsed.hostname === 'telegram.me') && (parsed.searchParams.has('startapp') || parsed.pathname.split('/').filter(Boolean).length > 1)) resolveMiniapp(parsed.href); else window.open(parsed.href, '_blank', 'noopener,noreferrer'); }
+  function openLink(url) { var parsed = safeHTTPS(url); if (!parsed) { toast('Questo collegamento non è supportato.'); return; } if (parsed.hostname === 't.me' || parsed.hostname === 'telegram.me') openTelegramLink(parsed); else window.open(parsed.href, '_blank', 'noopener,noreferrer'); }
+  async function openTelegramLink(url) {
+    var parts = url.pathname.replace(/\/$/, '').slice(1).split('/'), username = parts[0], start = url.searchParams.get('start');
+    if (url.port || !/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username) || parts.length > 2 || (start !== null && !/^[A-Za-z0-9_-]{0,64}$/.test(start))) { toast('Questo collegamento Telegram non è supportato.'); return; }
+    if (url.searchParams.has('startapp') || (parts.length === 2 && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(parts[1]))) { if (start !== null) { toast('Questo collegamento Telegram non è supportato.'); return; } resolveMiniapp(url.href); return; }
+    if (parts.length !== 1 || Array.from(url.searchParams.keys()).some(function (key) { return key !== 'start'; })) { toast('I collegamenti a messaggi e inviti Telegram non sono ancora supportati.'); return; }
+    function hasDraft() { if (start !== null && $('message-input').value.trim()) { toast('Hai un messaggio in bozza. Invialo o cancellalo prima di richiedere il contenuto al bot.'); return true; } return false; }
+    if (hasDraft()) return;
+    try {
+      var chat = state.chats.find(function (item) { return item.username && item.username.toLowerCase() === username.toLowerCase(); });
+      if (!chat) chat = (await api('/chats/resolve?username=' + encodeURIComponent(username))).chat;
+      if (!chat) { toast('Non è possibile aprire questa chat Telegram.'); return; }
+      if (start !== null && chat.kind !== 'bot') { toast('Questo collegamento di avvio non identifica un bot.'); return; }
+      if (hasDraft()) return;
+      if (!$('miniapp').hidden) closeMiniapp();
+      await openChat(chat);
+      if (start !== null && state.chat && state.chat.id === chat.id && !hasDraft()) { $('message-input').value = '/start' + (start ? ' ' + start : ''); setFocus($('send-button')); toast('Premi Invia per richiedere il contenuto al bot.'); }
+    } catch (error) { toast('Impossibile aprire la chat Telegram. ' + error.message); }
+  }
   async function resolveMiniapp(url) { try { var result = await api('/miniapp', { url: url }); openMiniapp(result.url); } catch (error) { toast(error.message); } }
   function saveResume() { if (state.videoKey && Number.isFinite($('video').currentTime)) { try { localStorage.setItem('telesera-resume-' + state.videoKey, String($('video').ended ? 0 : $('video').currentTime)); } catch (_) {} } }
   function openVideo(message, chat) {
@@ -162,6 +180,8 @@
     switch (data.eventType) {
       case 'web_app_ready': show($('miniapp-loading'), false); break;
       case 'web_app_close': closeMiniapp(); break;
+      case 'web_app_open_tg_link': if (typeof detail.path_full !== 'string' || !/^\/(?!\/)/.test(detail.path_full) || /[\\\u0000-\u0020]/.test(detail.path_full)) { toast('Questo collegamento Telegram non è supportato.'); break; } openLink('https://t.me' + detail.path_full); break;
+      case 'web_app_open_link': openLink(detail.url); break;
       case 'web_app_expand': miniEvent('viewport_changed', { height: $('miniapp-frame').clientHeight, is_state_stable: true, is_expanded: true }); break;
       case 'web_app_request_viewport': miniEvent('viewport_changed', { height: $('miniapp-frame').clientHeight, is_state_stable: true, is_expanded: true }); break;
       case 'web_app_request_theme': miniEvent('theme_changed', { theme_params: miniTheme }); break;

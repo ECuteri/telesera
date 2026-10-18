@@ -1,13 +1,14 @@
 # Telesera local API contract
 Independent client by Ennio Cuteri. Third-party protocol libraries retain their own licenses.
 Rust engine listens on 127.0.0.1:3190; serves ui/ at /. webOS wrapper opens http://127.0.0.1:3190/#token=LOCAL_SECRET. UI saves token in sessionStorage, removes fragment; all API fetches Authorization: Bearer token. Media/image URL queries ?token= same secret are allowed on loopback. Never log token or Telegram message text. Accept only loopback browser origin (and no Origin for native resource requests), reject other Origins; no wildcard CORS. No remote APIs or Spark dependency.
-All JSON failures {error:string}; normal responses as below. IDs strings. Dates ISO8601. No public env credentials. Configuration read from file arg --config PATH: {api_id:integer,api_hash:string,token:string,data_dir:string,ui_dir:string,port:3190,import_session?:{dc_id:integer,auth_key_hex:string,user_id?:integer}}. Import only once, protect session/config at mode0600. Existing session supported. Engine restart persists account.
+All JSON failures {error:string}; normal responses as below. IDs strings. Dates ISO8601. No public env credentials. Configuration read from file arg --config PATH: {api_id:integer,api_hash:string,token:string,data_dir:string,ui_dir:string,port:3190,import_session?:{dc_id:integer,auth_key_hex:string}}. Import only once, protect session/config at mode0600. Existing session supported. Engine restart persists account.
 GET /api/status -> {authorized:bool,user?:{id,name},version:string}
 POST /api/auth/phone {phone} -> {step:"code"}
 POST /api/auth/code {code} -> {step:"ready"|"password"}
 POST /api/auth/password {password} -> {step:"ready"}
-QR optional if readily implementable; phone login complete required. Session migration by parent for tonight.
-GET /api/chats -> {chats:[{id,title,kind:"user"|"bot"|"group"|"channel"|"saved",archived:bool,unread:number,photo:bool,last_text?:string}]}
+POST /api/auth/qr and POST /api/auth/qr/check -> {step:"qr",url:string,token:string,expires:integer} | {step:"password"} | {step:"ready"}. QR tokens are short-lived credentials; never log or publish them.
+GET /api/chats -> {chats:[{id,title,kind:"user"|"bot"|"group"|"channel"|"saved",archived:bool,unread:number,photo:bool,last_text?:string,username?:string}]}
+GET /api/chats/resolve?username=NAME -> {chat:<same chat object>}; read-only username resolution and peer caching. A leading @ is accepted; usernames contain 5–32 ASCII letters, digits or underscores and begin with a letter. Resolution never sends messages.
 GET /api/chats/:id/messages?before=INTEGER -> {messages:[{id:integer,chat_id:string,date:string,text:string,outgoing:bool,media?:{kind:"video"|"photo"|"document",name:string,mime:string,size:number,duration?:number},buttons?:[[{text,kind:"callback"|"text"|"url"|"miniapp"|"unsupported",url?:string,row:number,col:number}]]}],has_more:bool}
 GET /api/chats/:id/photo -> image
 GET /api/chats/:id/messages/:messageId/thumbnail -> image

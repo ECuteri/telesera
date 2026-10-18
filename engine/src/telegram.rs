@@ -14,19 +14,72 @@ pub async fn chats(State(app): State<Shared>) -> ApiResult<Json<Value>> {
         };
         let p = &dialog.peer;
         let id = p.id().bot_api_dialog_id_unchecked().to_string();
-        let kind = match p {
-            Peer::User(u) if u.is_self() => "saved",
-            Peer::User(u) if u.is_bot() => "bot",
-            Peer::User(_) => "user",
-            Peer::Channel(_) => "channel",
-            _ => "group",
-        };
-        result.push(json!({"id":id,"title":p.name().unwrap_or("Telegram"),"kind":kind,"archived":archived,"unread":unread,"photo":p.photo(false).await?.is_some(),"last_text":dialog.last_message.as_ref().map(|m|m.text()),"username":p.username()}));
+        result.push(
+            chat_json(
+                p,
+                archived,
+                unread,
+                dialog.last_message.as_ref().map(|m| m.text()),
+            )
+            .await?,
+        );
         peers.insert(id, p.clone());
     }
-    *app.peers.write().await = peers;
+    // Keep explicitly resolved peers usable after a dialog-list refresh.
+    app.peers.write().await.extend(peers);
     Ok(Json(json!({"chats":result})))
 }
+async fn chat_json(
+    p: &Peer,
+    archived: bool,
+    unread: i32,
+    last_text: Option<&str>,
+) -> ApiResult<Value> {
+    let kind = match p {
+        Peer::User(u) if u.is_self() => "saved",
+        Peer::User(u) if u.is_bot() => "bot",
+        Peer::User(_) => "user",
+        Peer::Channel(_) => "channel",
+        _ => "group",
+    };
+    Ok(
+        json!({"id":p.id().bot_api_dialog_id_unchecked().to_string(),"title":p.name().unwrap_or("Telegram"),"kind":kind,"archived":archived,"unread":unread,"photo":p.photo(false).await?.is_some(),"last_text":last_text,"username":p.username()}),
+    )
+}
+
+fn valid_username(value: &str) -> Option<&str> {
+    let username = value.strip_prefix('@').unwrap_or(value);
+    ((5..=32).contains(&username.len())
+        && username.as_bytes()[0].is_ascii_alphabetic()
+        && username
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+    .then_some(username)
+}
+
+#[derive(Deserialize)]
+pub struct Resolve {
+    username: String,
+}
+pub async fn resolve(
+    State(app): State<Shared>,
+    Query(query): Query<Resolve>,
+) -> ApiResult<Json<Value>> {
+    let username =
+        valid_username(&query.username).ok_or_else(|| bad("Username Telegram non valido"))?;
+    let peer = app
+        .client
+        .resolve_username(username)
+        .await?
+        .ok_or_else(|| missing("Chat non trovata"))?;
+    let chat = chat_json(&peer, false, 0, None).await?;
+    app.peers
+        .write()
+        .await
+        .insert(peer.id().bot_api_dialog_id_unchecked().to_string(), peer);
+    Ok(Json(json!({"chat":chat})))
+}
+
 pub async fn peer(app: &Shared, id: &str) -> ApiResult<Peer> {
     if let Some(p) = app.peers.read().await.get(id).cloned() {
         return Ok(p);
