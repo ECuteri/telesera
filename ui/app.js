@@ -181,7 +181,7 @@
       case 'web_app_ready': show($('miniapp-loading'), false); break;
       case 'web_app_close': closeMiniapp(); break;
       case 'web_app_open_tg_link': if (typeof detail.path_full !== 'string' || !/^\/(?!\/)/.test(detail.path_full) || /[\\\u0000-\u0020]/.test(detail.path_full)) { toast('Questo collegamento Telegram non è supportato.'); break; } openLink('https://t.me' + detail.path_full); break;
-      case 'web_app_open_link': openLink(detail.url); break;
+      case 'web_app_open_link': var link = safeHTTPS(detail.url); if (link && (link.hostname === 't.me' || link.hostname === 'telegram.me')) openTelegramLink(link); else toast('Il collegamento esterno non è stato aperto sulla TV.'); break;
       case 'web_app_expand': miniEvent('viewport_changed', { height: $('miniapp-frame').clientHeight, is_state_stable: true, is_expanded: true }); break;
       case 'web_app_request_viewport': miniEvent('viewport_changed', { height: $('miniapp-frame').clientHeight, is_state_stable: true, is_expanded: true }); break;
       case 'web_app_request_theme': miniEvent('theme_changed', { theme_params: miniTheme }); break;

@@ -78,7 +78,7 @@ The API contract is in [docs/contract.md](docs/contract.md). The backend also su
 
 ## Limits
 
-This is a focused TV client, not a complete replacement for the official Telegram apps. Calling, contacts/location sharing, payment flows and password-protected callbacks are not implemented. Mini Apps retain their own interface and may require the pointer. Playback inside a third-party frame cannot be inspected by the parent; the custom idle clock stays disabled while that frame is open.
+This is a focused TV client, not a complete replacement for the official Telegram apps. Calling, contacts/location sharing, payment flows and password-protected callbacks are not implemented. Mini Apps retain their own interface and may require the pointer. External Mini App popups are blocked because webOS can replace the application window; Telegram chat links stay inside Telesera. Playback inside a third-party frame cannot be inspected by the parent; the custom idle clock stays disabled while that frame is open.
 
 The native LG screensaver is a system function. Any system-level integration is separate from the application's clock. The app does not change microphone, camera, brightness or volume settings. Iframe camera, microphone and location permissions are denied.
 
