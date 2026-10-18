@@ -685,6 +685,10 @@ input::placeholder,textarea::placeholder {
   font-size:34px;
   position:relative;
 }
+.round-control>svg {
+  display:block;
+  margin:auto;
+}
 .round-control:hover {
   background:#ffffff38;
 }
