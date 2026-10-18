@@ -5,9 +5,19 @@ PIDFILE="$ROOT/private/engine.pid"
 if [ -r "$PIDFILE" ]; then
   PID=$(cat "$PIDFILE")
   case "$PID" in *[!0-9]*|'') ;; *)
-    if [ -r "/proc/$PID/cmdline" ] && tr '\000' ' ' < "/proc/$PID/cmdline" | grep -q "$ROOT/current/engine"; then exit 0; fi
+    if [ -r "/proc/$PID/cmdline" ] && tr '\000' ' ' < "/proc/$PID/cmdline" | grep -q "$ROOT/current/engine"; then
+      [ "${1:-start}" = stop ] || exit 0
+      kill "$PID" || exit 1
+      remaining=10
+      while kill -0 "$PID" 2>/dev/null; do
+        [ "$remaining" -gt 0 ] || { echo 'Engine did not stop; release retained.' >&2; exit 1; }
+        remaining=$((remaining - 1))
+        sleep 1
+      done
+    fi
   esac
 fi
+[ "${1:-start}" != stop ] || { rm -f "$PIDFILE"; exit 0; }
 [ -x "$ROOT/current/engine" ] && [ -r "$ROOT/private/config.json" ] || exit 1
 umask 077
 nohup "$ROOT/current/engine" --config "$ROOT/private/config.json" > "$ROOT/private/runtime.log" 2>&1 </dev/null &

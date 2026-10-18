@@ -96,20 +96,15 @@ sha256sum -c engine.sha256
 cd ..
 mkdir -p {root}/releases {root}/private
 chmod 700 {root}/private
+cp 25-telesera /var/lib/webosbrew/init.d/25-telesera
+chmod 755 /var/lib/webosbrew/init.d/25-telesera
+/var/lib/webosbrew/init.d/25-telesera stop
 if [ -e {root}/private/config.json ]; then cp {root}/private/config.json {root}/private/config.previous.json; fi
 cp config.json {root}/private/config.json
 chmod 600 {root}/private/config.json
 if [ -L {root}/current ]; then readlink {root}/current > {root}/private/previous-release; fi
-if [ -f {root}/private/engine.pid ]; then
- pid=$(cat {root}/private/engine.pid)
- case "$pid" in *[!0-9]*|'') ;; *)
-  if [ -r /proc/$pid/cmdline ] && tr '\\000' ' ' </proc/$pid/cmdline | grep -q '{root}/current/engine'; then kill "$pid"; fi;;
- esac
-fi
 mv release {root}/releases/{revision}
 ln -sfn {root}/releases/{revision} {root}/current
-cp 25-telesera /var/lib/webosbrew/init.d/25-telesera
-chmod 755 /var/lib/webosbrew/init.d/25-telesera
 /var/lib/webosbrew/init.d/25-telesera
 '''.format(dest=shlex.quote(dest), root=ROOT, revision=commit)
         # A subscription needs an open input/PTY on webOS. Three replies only
