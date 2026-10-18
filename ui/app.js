@@ -5,21 +5,29 @@
   if (token) { sessionStorage.setItem('telesera-token', token); history.replaceState(null, '', location.pathname + location.search); }
   token = token || sessionStorage.getItem('telesera-token') || '';
   var state = { chats: [], chat: null, archived: false, messages: [], hasMore: false, authStep: 'phone', loading: false, videoKey: '', returnFocus: null, miniOrigin: '', miniBack: false, lastActivity: Date.now(), lastProgress: 0, lastTime: 0 };
-  var toastTimer, chatRequest = 0;
+  var toastTimer, chatRequest = 0, lastChatsPayload = null;
   var miniTheme = { bg_color: '#172238', text_color: '#e7edf8', hint_color: '#a0aec5', link_color: '#aac8ff', button_color: '#6389db', button_text_color: '#ffffff', secondary_bg_color: '#1b2941' };
   function normalize(value) { return String(value || '').normalize('NFKC'); }
   function el(tag, className, text) { var node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; }
   function show(node, visible) { node.hidden = !visible; }
   function toast(message) { $('toast').textContent = message; show($('toast'), true); clearTimeout(toastTimer); toastTimer = setTimeout(function () { show($('toast'), false); }, 6000); }
   async function api(path, data) {
-    var options = { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' };
+    var controller = new AbortController();
+    var options = { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store', signal: controller.signal };
     if (data !== undefined) { options.method = 'POST'; options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(data); }
+    var timeout = setTimeout(function () { controller.abort(); }, 25000);
     var response;
-    try { response = await fetch('/api' + path, options); } catch (_) { throw new Error('La connessione si è interrotta. Riprova tra un momento.'); }
-    var body;
-    try { body = await response.json(); } catch (_) { throw new Error('Il servizio non è ancora pronto. Riprova tra un momento.'); }
-    if (!response.ok) throw new Error(body.error || 'Operazione non riuscita. Riprova.');
-    return body;
+    try {
+      response = await fetch('/api' + path, options);
+      var body;
+      try { body = await response.json(); } catch (error) { if (controller.signal.aborted) throw error; throw new Error('Il servizio non è ancora pronto. Riprova tra un momento.'); }
+      if (!response.ok) throw new Error(body.error || 'Operazione non riuscita. Riprova.');
+      return body;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('La risposta sta impiegando troppo tempo. Controlla la connessione e riprova.');
+      if (!response) throw new Error('La connessione si è interrotta. Riprova tra un momento.');
+      throw error;
+    } finally { clearTimeout(timeout); }
   }
   function resource(path) { return '/api' + path + '?token=' + encodeURIComponent(token); }
   function chatPath(chat) { return '/chats/' + encodeURIComponent(chat.id); }
@@ -72,7 +80,7 @@
     if (!chats.length) container.appendChild(el('p', 'list-empty', query ? 'Nessuna chat trovata.' : state.archived ? 'Nessuna chat archiviata.' : 'Le tue chat appariranno qui.'));
     container.scrollTop = scroll; restoreFocus(container, focus);
   }
-  async function loadChats() { try { var result = await api('/chats'); state.chats = result.chats; renderChats(); } catch (error) { if (!state.chats.length) { $('chat-list').textContent = ''; $('chat-list').appendChild(el('p', 'list-empty', error.message)); var retry = el('button', 'pill load-older', 'Riprova'); retry.onclick = loadChats; $('chat-list').appendChild(retry); } else toast(error.message); } }
+  async function loadChats() { try { var result = await api('/chats'), payload = JSON.stringify(result.chats); if (payload !== lastChatsPayload) { state.chats = result.chats; lastChatsPayload = payload; renderChats(); } } catch (error) { if (!state.chats.length) { lastChatsPayload = null; $('chat-list').textContent = ''; $('chat-list').appendChild(el('p', 'list-empty', error.message)); var retry = el('button', 'pill load-older', 'Riprova'); retry.onclick = loadChats; $('chat-list').appendChild(retry); } else toast(error.message); } }
   function selectArchive(archived) { state.archived = archived; $('inbox-tab').classList.toggle('selected', !archived); $('archive-tab').classList.toggle('selected', archived); $('inbox-tab').setAttribute('aria-pressed', String(!archived)); $('archive-tab').setAttribute('aria-pressed', String(archived)); renderChats(); }
   async function openChat(chat) {
     state.chat = chat; state.messages = []; state.hasMore = false; chatRequest++; state.loading = false;
