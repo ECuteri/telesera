@@ -1,0 +1,27 @@
+[package]
+name = "telesera-engine"
+version = "1.0.0"
+edition = "2024"
+authors = ["Ennio Cuteri"]
+license = "MIT"
+description = "Local Telegram engine for the Telesera webOS TV client"
+repository = "https://github.com/ECuteri/telesera"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+axum = "0.8"
+bytes = "1"
+futures-util = "0.3"
+grammers-client = "0.11"
+grammers-session = { version = "0.11", default-features = false }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs"] }
+url = "2"
+
+[profile.release]
+lto = "thin"
+strip = true

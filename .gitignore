@@ -1,0 +1,13 @@
+/target/
+/engine/target/
+/dist/
+/private/
+*.session
+*.session-*
+*.db
+*.db-*
+.env
+*.ipk
+.DS_Store
+/webos/bootstrap.js
+__pycache__/

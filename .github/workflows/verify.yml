@@ -1,0 +1,25 @@
+name: Verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+          targets: aarch64-unknown-linux-musl
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo fmt --manifest-path engine/Cargo.toml --check
+      - run: cargo clippy --manifest-path engine/Cargo.toml --locked -- -D warnings
+      - run: node --check ui/app.js && python3 -m py_compile scripts/install.py scripts/third-party.py
+      - run: cargo build --manifest-path engine/Cargo.toml --release --locked --target aarch64-unknown-linux-musl
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      - run: python3 scripts/third-party.py && git diff --exit-code -- THIRD_PARTY.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telesera-arm64-${{ github.sha }}
+          path: engine/target/aarch64-unknown-linux-musl/release/telesera-engine

@@ -1,0 +1,14 @@
+{
+  "id": "it.ennio.telesera",
+  "version": "1.0.0",
+  "vendor": "Ennio Cuteri",
+  "type": "web",
+  "main": "index.html",
+  "title": "Telesera",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0b1421",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredPermissions": []
+}

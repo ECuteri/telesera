@@ -1,0 +1,14 @@
+#!/bin/sh
+# Homebrew startup hook. Keeps account material outside versioned application files.
+ROOT=/media/developer/telesera
+PIDFILE="$ROOT/private/engine.pid"
+if [ -r "$PIDFILE" ]; then
+  PID=$(cat "$PIDFILE")
+  case "$PID" in *[!0-9]*|'') ;; *)
+    if [ -r "/proc/$PID/cmdline" ] && tr '\000' ' ' < "/proc/$PID/cmdline" | grep -q "$ROOT/current/engine"; then exit 0; fi
+  esac
+fi
+[ -x "$ROOT/current/engine" ] && [ -r "$ROOT/private/config.json" ] || exit 1
+umask 077
+nohup "$ROOT/current/engine" --config "$ROOT/private/config.json" > "$ROOT/private/runtime.log" 2>&1 </dev/null &
+echo $! > "$PIDFILE"
