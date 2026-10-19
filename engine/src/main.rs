@@ -1,4 +1,5 @@
 mod media;
+mod network;
 mod session;
 mod stickers;
 mod telegram;
@@ -106,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
     )?);
     let pool = grammers_client::SenderPool::new(session.clone(), config.api_id);
     let client = Client::new(pool.handle.clone());
+    tokio::spawn(network::maintain(pool.handle.clone()));
     tokio::spawn(pool.runner.run());
     // The UI polls history; drain protocol updates so a quiet UI never blocks MTProto.
     let mut updates = pool.updates;

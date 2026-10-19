@@ -76,14 +76,20 @@
   function rememberFocus(container) { var active = document.activeElement; return active && container.contains(active) ? active.dataset.focusKey : null; }
   function restoreFocus(container, key) { if (!key) return; var nodes = container.querySelectorAll('[data-focus-key]'); for (var i = 0; i < nodes.length; i++) if (nodes[i].dataset.focusKey === key) { nodes[i].focus({ preventScroll: true }); break; } }
   function setFocus(node) { if (node && !node.hidden) node.focus(); }
+  var connecting = false, reconnectTimer;
   async function connect() {
+    if (connecting) return;
+    connecting = true; clearTimeout(reconnectTimer);
     show($('retry-connection'), false); $('connection-message').textContent = t("Connecting to your account…");
     try {
       if (!token) throw new Error(t("Open Telesera from the TV app to connect to your account."));
       var status = await api('/status');
       if (status.authorized) { show($('connection'), false); show($('login'), false); show($('app'), true); $('account-name').textContent = normalize(status.user && status.user.name || t("Your account")); $('account-avatar').textContent = initials($('account-name').textContent); await loadChats(); setFocus($('search')); }
       else { show($('connection'), false); show($('login'), true); renderLogin(); }
-    } catch (error) { $('connection-message').textContent = error.message; show($('retry-connection'), true); }
+    } catch (error) {
+      $('connection-message').textContent = error.message; show($('retry-connection'), true);
+      if (token && !$('connection').hidden) reconnectTimer = setTimeout(connect, 5000);
+    } finally { connecting = false; }
   }
   function renderLogin() {
     var step = state.authStep, input = $('login-input'); input.value = ''; show($('login-error'), false);
@@ -319,6 +325,7 @@
   $('video').addEventListener('timeupdate', function () { if (Math.abs(this.currentTime - state.lastTime) > .05 && !this.paused && this.readyState >= 2) { state.lastProgress = Date.now(); state.lastTime = this.currentTime; } $('video-time').textContent = duration(this.currentTime); $('video-duration').textContent = duration(this.duration); $('video-progress').value = Number.isFinite(this.duration) && this.duration ? Math.round(this.currentTime / this.duration * 1000) : 0; saveResume(); });
   ['play', 'pause', 'ended'].forEach(function (event) { $('video').addEventListener(event, updatePlay); }); $('video').addEventListener('error', function () { if (state.videoKey && this.getAttribute('src')) { $('player-error').querySelector('p').textContent = t(this.error && this.error.code === 2 ? 'The video connection was interrupted. Check your network and retry.' : this.error && this.error.code === 3 ? 'The TV could not decode this video. Try another version of the file.' : this.error && this.error.code === 4 ? 'This video format is not supported by the TV. Try another version of the file.' : 'Playback is unavailable. Please retry.'); show($('player-error'), true); } });
   $('miniapp-close').onclick = closeMiniapp; $('miniapp-back').onclick = function () { miniEvent('back_button_pressed'); }; $('miniapp-main').onclick = function () { miniEvent('main_button_pressed'); }; $('miniapp-frame').addEventListener('load', function () { show($('miniapp-loading'), false); miniEvent('theme_changed', { theme_params: miniTheme }); miniEvent('viewport_changed', { height: this.clientHeight, is_state_stable: true, is_expanded: true }); });
-  window.addEventListener('beforeunload', saveResume); document.addEventListener('visibilitychange', function () { if (!document.hidden) { state.lastActivity = Date.now(); if (!$('app').hidden) { loadChats(); loadMessages(); } } });
+  window.addEventListener('beforeunload', saveResume); document.addEventListener('visibilitychange', function () { if (!document.hidden) { state.lastActivity = Date.now(); if (!$('app').hidden) { loadChats(); loadMessages(); } else if (!$('connection').hidden) connect(); } });
+  window.addEventListener('online', function () { if (!$('connection').hidden) connect(); else if (!$('app').hidden) { loadChats(); loadMessages(); } });
   setInterval(function () { if (!$('app').hidden && !document.hidden && $('player').hidden && $('miniapp').hidden) loadMessages(); }, 5000); setInterval(function () { if (!$('app').hidden && !document.hidden) loadChats(); }, 30000); setInterval(updateClock, 1000); setInterval(function () { if ($('screensaver').hidden) return; var saver = $('saver-clock'); saver.style.left = (20 + Math.random() * Math.max(0, innerWidth - saver.offsetWidth - 40)) + 'px'; saver.style.top = (20 + Math.random() * Math.max(0, innerHeight - saver.offsetHeight - 40)) + 'px'; }, 30000); updateClock(); connect();
 }());
