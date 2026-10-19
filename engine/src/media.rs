@@ -2,17 +2,76 @@ use crate::*;
 use axum::{extract::Path, http::HeaderMap};
 use bytes::Bytes;
 use futures_util::stream;
-use grammers_client::media::{Downloadable, Media};
-use std::io;
+use grammers_client::media::{Document, Downloadable, Media, PhotoSize};
+use std::{
+    collections::VecDeque,
+    io,
+    time::{Duration, Instant},
+};
 const CHUNK: usize = 256 * 1024;
 
+#[derive(Default)]
+pub struct ImageCache {
+    entries: VecDeque<(String, Bytes, Instant)>,
+    bytes: usize,
+}
+impl ImageCache {
+    fn get(&self, key: &str) -> Option<Bytes> {
+        self.entries
+            .iter()
+            .find(|(k, _, at)| k == key && at.elapsed() < Duration::from_secs(300))
+            .map(|(_, bytes, _)| bytes.clone())
+    }
+    fn insert(&mut self, key: String, value: Bytes) {
+        while self.bytes + value.len() > 8 * 1024 * 1024 || self.entries.len() >= 256 {
+            if let Some((_, bytes, _)) = self.entries.pop_front() {
+                self.bytes -= bytes.len();
+            } else {
+                break;
+            }
+        }
+        self.bytes += value.len();
+        self.entries.push_back((key, value, Instant::now()));
+    }
+}
+struct ProfilePhoto {
+    location: tl::enums::InputFileLocation,
+    dc: i32,
+}
+impl Downloadable for ProfilePhoto {
+    fn to_raw_input_location(&self) -> Option<tl::enums::InputFileLocation> {
+        Some(self.location.clone())
+    }
+    fn dc_id(&self) -> Option<i32> {
+        Some(self.dc)
+    }
+}
 pub async fn photo(State(app): State<Shared>, Path(id): Path<String>) -> ApiResult<Response> {
     let p = telegram::peer(&app, &id).await?;
-    let photo = p
+    let (photo_id, dc) = match &p {
+        Peer::User(u) => u.photo().map(|p| (p.photo_id, p.dc_id)),
+        Peer::Group(g) => g.photo().map(|p| (p.photo_id, p.dc_id)),
+        Peer::Channel(c) => c.photo().map(|p| (p.photo_id, p.dc_id)),
+        Peer::Community(c) => c.photo().map(|p| (p.photo_id, p.dc_id)),
+    }
+    .ok_or_else(|| missing("Foto non disponibile"))?;
+    let key = format!("{id}:{photo_id}");
+    if let Some(bytes) = app.image_cache.lock().await.get(&key) {
+        return image_response(bytes);
+    }
+    // Images must never queue behind paused or slow video Range streams.
+    let _permit = app.images.clone().acquire_owned().await?;
+    if let Some(bytes) = app.image_cache.lock().await.get(&key) {
+        return image_response(bytes);
+    }
+    let location = p
         .photo(false)
         .await?
-        .ok_or_else(|| missing("Foto non disponibile"))?;
-    small_image(&app, &photo).await
+        .ok_or_else(|| missing("Foto non disponibile"))?
+        .raw;
+    let bytes = download_image(&app, &ProfilePhoto { location, dc }).await?;
+    app.image_cache.lock().await.insert(key, bytes.clone());
+    image_response(bytes)
 }
 pub async fn thumbnail(
     State(app): State<Shared>,
@@ -22,11 +81,15 @@ pub async fn thumbnail(
     let thumbs = match m.media() {
         Some(Media::Photo(p)) => p.thumbs(),
         Some(Media::Document(d)) => d.thumbs(),
+        Some(Media::Sticker(s)) => return sticker_preview(&app, &s.document).await,
         _ => return Err(missing("Anteprima non disponibile")),
     };
-    // Prefer a real 320px JPEG over vector or stripped placeholders.
-    let photo = thumbs
+    small_image(&app, &best_thumbnail(thumbs)?).await
+}
+fn best_thumbnail(thumbs: Vec<PhotoSize>) -> ApiResult<PhotoSize> {
+    thumbs
         .into_iter()
+        .filter(|p| !matches!(p, PhotoSize::Path(_) | PhotoSize::Empty(_)))
         .filter(|p| p.to_raw_input_location().is_some() || p.to_data().is_some())
         .min_by_key(|p| {
             if p.size() >= 10_000 {
@@ -35,24 +98,57 @@ pub async fn thumbnail(
                 usize::MAX - p.size()
             }
         })
-        .ok_or_else(|| missing("Anteprima non disponibile"))?;
-    small_image(&app, &photo).await
+        .ok_or_else(|| missing("Anteprima non disponibile"))
+}
+pub async fn sticker_preview(app: &Shared, doc: &Document) -> ApiResult<Response> {
+    if matches!(
+        doc.mime_type(),
+        Some("image/webp" | "image/png" | "image/jpeg")
+    ) {
+        small_image(app, doc).await
+    } else {
+        small_image(app, &best_thumbnail(doc.thumbs())?).await
+    }
 }
 async fn small_image<D: Downloadable>(app: &Shared, photo: &D) -> ApiResult<Response> {
-    let _permit = app.downloads.clone().acquire_owned().await?;
-    let mut iter = app.client.iter_download(photo).chunk_size(CHUNK as i32);
-    let mut bytes = Vec::new();
-    while let Some(chunk) = iter.next().await? {
-        if bytes.len() + chunk.len() > 4 * 1024 * 1024 {
-            return Err(bad("Anteprima troppo grande"));
+    let _permit = app.images.clone().acquire_owned().await?;
+    image_response(download_image(app, photo).await?)
+}
+async fn download_image<D: Downloadable>(app: &Shared, photo: &D) -> ApiResult<Bytes> {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        let mut iter = app.client.iter_download(photo).chunk_size(CHUNK as i32);
+        let mut bytes = Vec::new();
+        while let Some(chunk) = iter.next().await? {
+            if bytes.len() + chunk.len() > 4 * 1024 * 1024 {
+                return Err(bad("Anteprima troppo grande"));
+            }
+            bytes.extend(chunk);
         }
-        bytes.extend(chunk);
-    }
-    if bytes.is_empty() {
-        return Err(missing("Immagine non disponibile"));
-    }
+        if bytes.is_empty() {
+            return Err(missing("Immagine non disponibile"));
+        }
+        Ok(Bytes::from(bytes))
+    })
+    .await
+    .map_err(|_| {
+        ApiError(
+            StatusCode::GATEWAY_TIMEOUT,
+            "Image download timed out".into(),
+        )
+    })?
+}
+fn image_response(bytes: Bytes) -> ApiResult<Response> {
+    let mime = if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        "image/webp"
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        "image/jpeg"
+    } else {
+        return Err(bad("Unsupported image format"));
+    };
     Ok(Response::builder()
-        .header(header::CONTENT_TYPE, "image/jpeg")
+        .header(header::CONTENT_TYPE, mime)
         .header(header::CONTENT_LENGTH, bytes.len())
         .body(Body::from(bytes))
         .unwrap())
@@ -64,7 +160,10 @@ pub async fn media(
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     let m = telegram::message(&app, &id, mid).await?;
-    let media = m.media().ok_or_else(|| missing("File non disponibile"))?;
+    let media = match m.media().ok_or_else(|| missing("File non disponibile"))? {
+        Media::Sticker(s) => Media::Document(s.document),
+        media => media,
+    };
     let (mime, size, attachment) = match &media {
         Media::Photo(p) => ("image/jpeg".to_string(), p.size(), false),
         Media::Document(d) => {

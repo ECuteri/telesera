@@ -14,7 +14,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
       - run: cargo fmt --manifest-path engine/Cargo.toml --check
       - run: cargo clippy --manifest-path engine/Cargo.toml --locked -- -D warnings
-      - run: node --check ui/app.js && python3 -m py_compile scripts/install.py scripts/third-party.py
+      - run: node --check ui/app.js && node --check ui/i18n.js && node --check webos/launch.js && python3 -m py_compile scripts/install.py scripts/third-party.py
       - run: cargo build --manifest-path engine/Cargo.toml --release --locked --target aarch64-unknown-linux-musl
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc

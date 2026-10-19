@@ -145,6 +145,9 @@ fn message_json(m: &Message, id: &str) -> Value {
             Media::Photo(p) => {
                 v["media"] = json!({"kind":"photo","name":"Foto.jpg","mime":"image/jpeg","size":p.size().unwrap_or(0)})
             }
+            Media::Sticker(s) => {
+                v["media"] = json!({"kind":"sticker","emoji":s.emoji(),"format":stickers::format(&s.document),"mime":s.document.mime_type(),"size":s.document.size().unwrap_or(0)});
+            }
             Media::Document(d) => {
                 let mime = d.mime_type().unwrap_or("application/octet-stream");
                 v["media"] = json!({"kind":if mime.starts_with("video/"){"video"}else{"document"},"name":d.name().unwrap_or("File"),"mime":mime,"size":d.size().unwrap_or(0),"duration":d.duration()});

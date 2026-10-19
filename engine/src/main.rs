@@ -1,5 +1,6 @@
 mod media;
 mod session;
+mod stickers;
 mod telegram;
 use axum::{
     Json, Router,
@@ -55,6 +56,9 @@ struct App {
     auth: Mutex<Auth>,
     peers: RwLock<HashMap<String, Peer>>,
     downloads: Arc<Semaphore>,
+    images: Arc<Semaphore>,
+    image_cache: Mutex<media::ImageCache>,
+    stickers: Mutex<stickers::Catalog>,
 }
 type Shared = Arc<App>;
 struct ApiError(StatusCode, String);
@@ -115,6 +119,9 @@ async fn main() -> anyhow::Result<()> {
         auth: Mutex::new(Auth::default()),
         peers: RwLock::new(HashMap::new()),
         downloads: Arc::new(Semaphore::new(4)),
+        images: Arc::new(Semaphore::new(4)),
+        image_cache: Mutex::new(media::ImageCache::default()),
+        stickers: Mutex::new(stickers::Catalog::default()),
     });
     let api = Router::new()
         .route("/api/status", get(status))
@@ -123,6 +130,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/password", post(password))
         .route("/api/auth/qr", post(qr))
         .route("/api/auth/qr/check", post(qr))
+        .route("/api/stickers", get(stickers::catalog))
+        .route("/api/stickers/sets/{id}", get(stickers::set))
+        .route("/api/stickers/{id}/thumbnail", get(stickers::thumbnail))
+        .route("/api/chats/{id}/stickers", post(stickers::send))
         .route("/api/chats", get(telegram::chats))
         .route("/api/chats/resolve", get(telegram::resolve))
         .route("/api/chats/{id}/messages", get(telegram::messages))

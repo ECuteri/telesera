@@ -157,6 +157,7 @@ input::placeholder,textarea::placeholder {
   background:#e4ebfb;
 }
 .avatar {
+  position:relative;
   width:48px;
   height:48px;
   min-width:48px;
@@ -171,6 +172,8 @@ input::placeholder,textarea::placeholder {
   overflow:hidden;
 }
 .avatar img {
+  position:absolute;
+  inset:0;
   width:100%;
   height:100%;
   object-fit:cover;
@@ -1320,3 +1323,22 @@ input::placeholder,textarea::placeholder {
 .media-photo {
   min-height:180px;
 }
+
+/* Sticker selection shares the conversation surface and remote focus model. */
+.sticker-overlay { position:fixed; inset:0; z-index:45; display:flex; align-items:flex-end; justify-content:flex-end; padding:40px; background:#03081066; }
+.sticker-panel { width:min(620px,100%); max-height:75vh; display:flex; flex-direction:column; border:1px solid #405477; border-radius:26px; padding:20px; background:#1c2a42; box-shadow:0 18px 60px #03081070; }
+.sticker-panel header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.sticker-panel h2 { font-size:23px; margin:0; flex:1; min-width:0; overflow-wrap:anywhere; }
+.sticker-panel .chat-tabs { margin:0 0 14px; flex-shrink:0; }
+.sticker-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; min-height:150px; overflow:auto; padding:6px; }
+.sticker-grid.pack-list { grid-template-columns:1fr; }
+.sticker-grid .list-empty,.sticker-grid .load-older { grid-column:1/-1; }
+.sticker-choice { border-radius:18px; min-width:0; height:116px; padding:10px; background:transparent; color:var(--text); font-size:32px; position:relative; display:grid; place-items:center; }
+.sticker-choice:hover,.sticker-pack:hover { background:#30476c; }
+.sticker-choice img { position:absolute; inset:10px; width:calc(100% - 20px); height:calc(100% - 20px); object-fit:contain; }
+.sticker-pack { display:flex; align-items:center; justify-content:space-between; gap:16px; text-align:left; border-radius:14px; padding:16px; min-height:56px; background:transparent; color:var(--text); font-size:18px; overflow-wrap:anywhere; }
+.sticker-pack span { color:var(--muted); flex-shrink:0; }
+.message-sticker { display:grid; place-items:center; width:180px; height:180px; font-size:64px; position:relative; }
+.message-sticker img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.composer textarea { min-width:0; }
+@media(max-width:700px) { .sticker-overlay { padding:12px; } .sticker-panel { padding:16px; max-height:80vh; } .sticker-grid { gap:4px; } .sticker-choice { height:80px; } .sticker-panel h2 { font-size:20px; } .composer { gap:8px; } }

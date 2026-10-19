@@ -13,10 +13,14 @@ Telesera uses the Telegram API and is part of the Telegram ecosystem. It is not 
 - Floating, iPad-inspired chat sidebar with a separate archive.
 - Private conversations, groups, channels, bots and saved messages.
 - Text messages and supported bot keyboard and callback buttons.
+- Sticker sending from recent stickers, favorites and installed packs, with still previews for animated/video stickers.
 - Embedded Telegram Mini Apps with a restricted web bridge.
 - Video artwork and Play together, central player controls, 15-second seeking and saved playback positions.
 - Magic Remote pointer and directional navigation, including text-entry handling.
 - Profile pictures, readable normalization of decorative titles and a dim moving clock/date screensaver.
+- Automatic TV-language selection: English, Italian, Spanish, French and German, with English as the fallback.
+
+![English sticker picker with fictional conversations and original sample artwork](docs/images/stickers.png)
 
 ## Architecture
 
@@ -27,7 +31,7 @@ Magic Remote → webOS application → local Rust engine → Telegram
 
 The engine binds only to `127.0.0.1:3190`. A random local token protects the API, and browser origins are restricted. Account/session files remain in a private directory on the TV. The interface uses HTML, CSS and JavaScript without a frontend framework or build step; the engine uses Rust and grammers.
 
-Third-party Mini Apps connect directly to their own HTTPS sites. They do not receive Telesera's local API token. Telegram files remain subject to the TV's hardware codec support; the engine does not transcode unsupported formats.
+Third-party Mini Apps connect directly to their own HTTPS sites. They do not receive Telesera's local API token. Telegram files remain subject to the TV's hardware codec support; the engine does not transcode unsupported formats. See [playback compatibility and conversion options](docs/playback.md).
 
 ## Requirements
 
@@ -83,6 +87,8 @@ This is a focused TV client, not a complete replacement for the official Telegra
 The native LG screensaver is a system function. Any system-level integration is separate from the application's clock. The app does not change microphone, camera, brightness or volume settings. Iframe camera, microphone and location permissions are denied.
 
 ## Contributing and licensing
+
+Contributions are welcome from everyone through issues and pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) for development checks, translations and screenshot guidelines. Direct write access is managed by the maintainer.
 
 Code is licensed under MIT, copyright Ennio Cuteri. This is an independent implementation with its own history; see [source provenance](docs/provenance.md). Third-party libraries retain their [licenses and notices](THIRD_PARTY.md).
 

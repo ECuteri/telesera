@@ -66,8 +66,9 @@ def main():
         (stage / 'engine.sha256').write_text(digest + '  engine\n')
         app = tmp / 'app'
         shutil.copytree(repo / 'webos', app, ignore=shutil.ignore_patterns('bootstrap.js', 'bootstrap.example.js'))
+        shutil.copy2(repo / 'ui/i18n.js', app / 'i18n.js')
         url = 'http://127.0.0.1:3190/#token=' + __import__('urllib.parse', fromlist=['quote']).quote(token, safe='')
-        bootstrap = "var target=" + json.dumps(url) + ";var retry=document.getElementById('retry'),tries=0;function openApp(){var image=new Image();image.onload=function(){location.replace(target);};image.onerror=function(){if(++tries<20){setTimeout(openApp,1000);}else{document.getElementById('state').textContent='Il servizio locale non è disponibile.';retry.hidden=false;}};image.src='http://127.0.0.1:3190/icon.svg?ready='+Date.now();}retry.onclick=function(){tries=0;retry.hidden=true;openApp();};openApp();"
+        bootstrap = "window.TeleseraTarget=" + json.dumps(url) + ";"
         (app / 'bootstrap.js').write_text(bootstrap)
         subprocess.run([args.ares_package, str(app), '-o', str(tmp)], check=True, stdout=subprocess.DEVNULL)
         package = next(tmp.glob('*.ipk'))
