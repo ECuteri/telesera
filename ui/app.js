@@ -145,7 +145,10 @@
     if (message.buttons && message.buttons.length) {
       var buttons = el('div', 'bot-buttons'); message.buttons.forEach(function (row, rowIndex) { var rowNode = el('div', 'bot-row'); row.forEach(function (button, colIndex) { var node = el('button', '', normalize(button.text)); node.dataset.focusKey = 'button-' + message.id + '-' + rowIndex + '-' + colIndex; node.disabled = button.kind === 'unsupported'; if (node.disabled) node.title = t("This action is not available on the TV"); node.onclick = function () { pressBotButton(message, chat, button, rowIndex, colIndex, node); }; rowNode.appendChild(node); }); buttons.appendChild(rowNode); }); article.appendChild(buttons);
     }
-    var stamp = el('div', 'message-time', time(message.date)); article.appendChild(stamp); if (!article.querySelector('button:not(:disabled),a[href]')) { article.tabIndex = 0; article.dataset.focusKey = 'message-' + message.id; } return article;
+    var stamp = el('div', 'message-time', time(message.date)); article.appendChild(stamp);
+    var actions = article.querySelectorAll('button:not(:disabled),a[href]');
+    actions.forEach(function (node, index) { if (!node.dataset.focusKey) node.dataset.focusKey = 'action-' + message.id + '-' + index; });
+    if (!actions.length) { article.tabIndex = 0; article.dataset.focusKey = 'message-' + message.id; } return article;
   }
   function renderMessages(forceBottom) {
     var container = $('message-list'), focus = rememberFocus(container), oldHeight = container.scrollHeight, oldTop = container.scrollTop, nearBottom = oldHeight - oldTop - container.clientHeight < 90;
