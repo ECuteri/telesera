@@ -84,7 +84,7 @@
     try {
       if (!token) throw new Error(t("Open Telesera from the TV app to connect to your account."));
       var status = await api('/status');
-      if (status.authorized) { show($('connection'), false); show($('login'), false); show($('app'), true); $('account-name').textContent = normalize(status.user && status.user.name || t("Your account")); $('account-avatar').textContent = initials($('account-name').textContent); await loadChats(); setFocus($('search')); }
+      if (status.authorized) { show($('connection'), false); show($('login'), false); show($('app'), true); $('account-name').textContent = normalize(status.user && status.user.name || t("Your account")); $('account-avatar').textContent = initials($('account-name').textContent); await loadChats(); setFocus($('chat-list').querySelector('button') || $('inbox-tab')); }
       else { show($('connection'), false); show($('login'), true); renderLogin(); }
     } catch (error) {
       $('connection-message').textContent = error.message; show($('retry-connection'), true);
@@ -122,7 +122,12 @@
   async function openChat(chat) {
     closeStickers(false); state.chat = chat; state.messages = []; state.hasMore = false; chatRequest++; state.loading = false;
     $('app').classList.add('chat-open'); show($('welcome'), false); show($('conversation-head'), true); show($('message-list'), true); show($('composer'), true); show($('chat-error'), false); $('message-list').textContent = ''; $('message-list').appendChild(el('p', 'list-empty', t("Loading…"))); $('chat-title').textContent = normalize(chat.title); $('chat-kind').textContent = { bot: t("Bot"), user: t("Conversation"), group: t("Group"), channel: t("Channel"), saved: t("Saved Messages") }[chat.kind] || t("Conversation"); $('chat-avatar').textContent = ''; $('chat-avatar').appendChild(avatar(chat)); show($('bot-app'), chat.kind === 'bot' && Boolean(chat.username)); $('message-input').value = ''; renderChats(); await loadMessages(false, true);
-    if (state.chat && state.chat.id === chat.id) { var first = $('message-list').querySelector('button,a'); setFocus(first || $('message-input')); }
+    if (state.chat && state.chat.id === chat.id) {
+      var messages = $('message-list').querySelectorAll('.message'), last = messages[messages.length - 1];
+      var actions = last ? visibleFocusable(last) : [];
+      // Keep the latest message in view; focusing history or the composer jumps away or opens the TV keyboard.
+      (actions[actions.length - 1] || last || $('sticker-button')).focus({ preventScroll: true });
+    }
   }
   function appendText(node, text) {
     var parts = String(text).split(/(https?:\/\/[^\s<>]+)/g); parts.forEach(function (part) { if (!/^https?:\/\//.test(part)) { node.appendChild(document.createTextNode(part)); return; } var link = el('a', '', part); link.href = part; link.rel = 'noopener noreferrer'; link.target = '_blank'; link.addEventListener('click', function (event) { event.preventDefault(); openLink(part); }); node.appendChild(link); });
@@ -140,7 +145,7 @@
     if (message.buttons && message.buttons.length) {
       var buttons = el('div', 'bot-buttons'); message.buttons.forEach(function (row, rowIndex) { var rowNode = el('div', 'bot-row'); row.forEach(function (button, colIndex) { var node = el('button', '', normalize(button.text)); node.dataset.focusKey = 'button-' + message.id + '-' + rowIndex + '-' + colIndex; node.disabled = button.kind === 'unsupported'; if (node.disabled) node.title = t("This action is not available on the TV"); node.onclick = function () { pressBotButton(message, chat, button, rowIndex, colIndex, node); }; rowNode.appendChild(node); }); buttons.appendChild(rowNode); }); article.appendChild(buttons);
     }
-    var stamp = el('div', 'message-time', time(message.date)); article.appendChild(stamp); if (!article.querySelector('button,a')) { article.tabIndex = 0; article.dataset.focusKey = 'message-' + message.id; } return article;
+    var stamp = el('div', 'message-time', time(message.date)); article.appendChild(stamp); if (!article.querySelector('button:not(:disabled),a[href]')) { article.tabIndex = 0; article.dataset.focusKey = 'message-' + message.id; } return article;
   }
   function renderMessages(forceBottom) {
     var container = $('message-list'), focus = rememberFocus(container), oldHeight = container.scrollHeight, oldTop = container.scrollTop, nearBottom = oldHeight - oldTop - container.clientHeight < 90;
@@ -303,7 +308,7 @@
     else if (!$('miniapp').hidden) { if (state.miniBack) miniEvent('back_button_pressed'); else closeMiniapp(); }
     else if (!$('player').hidden) closeVideo();
     else if (document.activeElement.matches('input,textarea')) document.activeElement.blur();
-    else { $('app').classList.remove('chat-open'); setFocus($('chat-list').querySelector('.selected') || $('search')); }
+    else { $('app').classList.remove('chat-open'); setFocus($('chat-list').querySelector('.selected') || $('chat-list').querySelector('button') || $('inbox-tab')); }
   }
   document.addEventListener('keydown', function (event) {
     if (!$('screensaver').hidden) { show($('screensaver'), false); state.lastActivity = Date.now(); event.preventDefault(); event.stopImmediatePropagation(); return; }
